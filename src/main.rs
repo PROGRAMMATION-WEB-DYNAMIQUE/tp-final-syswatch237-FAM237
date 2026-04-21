@@ -1,17 +1,4 @@
-// src/main.rs
-use chrono::Local;
 use std::fmt;
-use sysinfo::{System, Process};
-use std::io::{BufRead, BufReader, Write};
-use std::net::{TcpListener, TcpStream};
-use std::sync::{Arc, Mutex};
-use std::thread;
-use std::time::Duration;
-use std::fs::OpenOptions;
-
-const AUTH_TOKEN: &str = "ENSPD2026";
-
-// --- Types métier ---
 
 #[derive(Debug, Clone)]
 struct CpuInfo {
@@ -42,12 +29,49 @@ struct SystemSnapshot {
     top_processes: Vec<ProcessInfo>,
 }
 
-// --- Affichage humain (Trait Display) ---
-
 impl fmt::Display for CpuInfo {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "CPU: {:.1}% ({} cœurs)", self.usage_percent, self.core_count)
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "CPU Usage: {:.1}% ({} cores)", self.usage_percent, self.core_count)
     }
+}
+
+impl fmt::Display for MemInfo {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Memory: {}MB used / {}MB total ({}MB free)", self.used_mb, self.total_mb, self.free_mb)
+    }
+}
+
+impl fmt::Display for ProcessInfo {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "[{}] {}: CPU {:.1}%, MEM {}MB", self.pid, self.name, self.cpu_usage, self.memory_mb)
+    }
+}
+
+impl fmt::Display for SystemSnapshot {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "System Snapshot at {}", self.timestamp)?;
+        writeln!(f, "{}", self.cpu)?;
+        writeln!(f, "{}", self.memory)?;
+        writeln!(f, "Top Processes:")?;
+        for p in &self.top_processes {
+            writeln!(f, "{}", p)?;
+        }
+        Ok(())
+    }
+}
+
+fn main() {
+    let snapshot = SystemSnapshot {
+        timestamp: "2023-10-01 12:00:00".to_string(),
+        cpu: CpuInfo { usage_percent: 45.2, core_count: 4 },
+        memory: MemInfo { total_mb: 8192, used_mb: 4096, free_mb: 4096 },
+        top_processes: vec![
+            ProcessInfo { pid: 1234, name: "chrome".to_string(), cpu_usage: 15.5, memory_mb: 512 },
+            ProcessInfo { pid: 5678, name: "vscode".to_string(), cpu_usage: 10.2, memory_mb: 256 },
+        ],
+    };
+    println!("{}", snapshot);
+}
 }
 
 impl fmt::Display for MemInfo {
@@ -417,40 +441,18 @@ fn handle_client(mut stream: TcpStream, snapshot: Arc<Mutex<SystemSnapshot>>) {
 //     println!("{}", format_response(&snapshot, "help"));
 // }
 
-// Main Exo 4: Serveur TCP multithreadé — Etape 1: Lancement d'un serveur TCP basique
-
-
+// Main Exo 1: Types métier et affichage — Etape 3: Affichage humain avec le trait Display
 fn main() {
-    println!("SysWatch démarrage...");
+    // Test d'affichage — données fictives pour valider les types
+    let snapshot = SystemSnapshot {
+        timestamp: "2023-10-01 12:00:00".to_string(),
+        cpu: CpuInfo { usage_percent: 42.5, core_count: 8 },
+        memory: MemInfo { total_mb: 16384, used_mb: 8192, free_mb: 8192 },
+        top_processes: vec![
+            ProcessInfo { pid: 1234, name: "code.exe".to_string(), cpu_usage: 12.3, memory_mb: 512 },
+            ProcessInfo { pid: 5678, name: "chrome.exe".to_string(), cpu_usage: 8.1, memory_mb: 1024 },
+        ],
+    };
 
-    // Collecte initiale
-    let initial = collect_snapshot().expect("Impossible de collecter les métriques initiales");
-    println!("Métriques initiales OK:\n{}", initial);
-
-    // Snapshot partagé entre tous les threads
-    let shared_snapshot = Arc::new(Mutex::new(initial));
-
-    // Thread de rafraîchissement automatique toutes les 5s
-    {
-        let snap_clone = Arc::clone(&shared_snapshot);
-        thread::spawn(move || snapshot_refresher(snap_clone));
-    }
-
-    // Démarrage du serveur TCP
-    let listener = TcpListener::bind("0.0.0.0:7878").expect("Impossible de bind le port 7878");
-    println!("Serveur en écoute sur port 7878...");
-    println!("Connecte-toi avec: telnet localhost 7878");
-    println!("  ou: nc localhost 7878 (WSL/Git Bash)");
-    println!("  ou: Test-NetConnection localhost -Port 7878 (PowerShell - test seulement)");
-    println!("Ctrl+C pour arrêter.\n");
-
-    for stream in listener.incoming() {
-        match stream {
-            Ok(stream) => {
-                let snap_clone = Arc::clone(&shared_snapshot);
-                thread::spawn(move || handle_client(stream, snap_clone));
-            }
-            Err(e) => eprintln!("Erreur connexion entrante: {}", e),
-        }
-    }
+    println!("{}", snapshot);
 }
